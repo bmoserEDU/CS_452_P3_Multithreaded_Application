@@ -1,7 +1,15 @@
 
+#define _GNU_SOURCE
 #include <stdlib.h>
+#include <stdio.h>
 #include <sys/time.h> /* for gettimeofday system call */
+#include <string.h>
+#include <pthread.h>
 #include "lab.h"
+
+// Global mutex for synchronizing merge operations
+static pthread_mutex_t merge_mutex = PTHREAD_MUTEX_INITIALIZER;
+static pthread_barrier_t sort_barrier;
 
 /**
  * @brief Standard insertion sort that is faster than merge sort for small array's
@@ -27,7 +35,6 @@ static void insertion_sort(int A[], int p, int r)
     }
 }
 
-
 void mergesort_s(int A[], int p, int r)
 {
   if (r - p + 1 <=  INSERTION_SORT_THRESHOLD)
@@ -46,7 +53,9 @@ void mergesort_s(int A[], int p, int r)
 
 void merge_s(int A[], int p, int q, int r)
 {
-  int *B = (int *)malloc(sizeof(int) * (r - p + 1));
+  // converting to size_t to fix warnings
+  size_t size = (size_t)(r - p + 1); 
+  int *B = (int *)malloc(sizeof(int) * size);
 
   int i = p;
   int j = q + 1;
@@ -101,9 +110,122 @@ void merge_s(int A[], int p, int q, int r)
   free(B);
 }
 
-double getMilliSeconds()
+void *parallel_mergesort(void *args)
 {
-  struct timeval now;
-  gettimeofday(&now, (struct timezone *)0);
-  return (double)now.tv_sec * 1000.0 + now.tv_usec / 1000.0;
+    struct parallel_args *pargs = (struct parallel_args *)args;
+    size_t start = pargs->start;
+    size_t end = pargs->end;
+    
+    if (start < end) {
+        mergesort_s(pargs->A, (int)start, (int)end);
+    }
+    
+    // Wait for all threads to complete their initial sort
+    pthread_barrier_wait(&sort_barrier);
+    
+    return NULL;
+}
+
+void mergesort_mt(int *A, size_t n, unsigned int num_threads)
+{
+    int barrier_initialized = 0;
+    int ret = 0;
+
+    if (num_threads > MAX_THREADS) {
+        // forcing to max threads if necessary
+        num_threads = MAX_THREADS;
+    }
+    
+    if (num_threads <= 1 || n <= INSERTION_SORT_THRESHOLD) {
+        // Cast to int is safe here since we know n is small
+        mergesort_s(A, 0, (int)(n - 1));
+        return;
+    }
+    
+    // Initialize barrier for synchronizing threads
+    ret = pthread_barrier_init(&sort_barrier, NULL, num_threads);
+    if (ret != 0) {
+        fprintf(stderr, "Failed to initialize barrier: %s\n", strerror(ret));
+        return;
+    }
+    barrier_initialized = 1;
+
+    // Create thread arguments array
+    struct parallel_args *thread_args = malloc(sizeof(struct parallel_args) * num_threads);
+    if (thread_args == NULL) {
+        fprintf(stderr, "Memory allocation failed for thread arguments\n");
+        return;
+    }
+
+    // Calculate chunk size for each thread
+    // Using second approach style from class with added remainder handling
+    size_t chunk_size = n / num_threads;
+    size_t remainder = n % num_threads;
+    size_t current_pos = 0;
+
+    // Create threads and assign work
+    size_t threads_created = 0;
+    for (size_t i = 0; i < num_threads; i++) {
+        thread_args[i].A = A;
+        thread_args[i].start = current_pos;
+        thread_args[i].end = current_pos + chunk_size - 1;
+        
+        // Add remainder elements to last thread
+        if (i == num_threads - 1) {
+            thread_args[i].end += remainder;
+        }
+        
+        ret = pthread_create(&thread_args[i].tid, NULL, parallel_mergesort, &thread_args[i]);
+        if (ret != 0) {
+            fprintf(stderr, "Failed to create thread %zu: %s\n", i, strerror(ret));
+            // Clean up already created threads
+            for (size_t j = 0; j < threads_created; j++) {
+                pthread_join(thread_args[j].tid, NULL);
+            }
+            if (barrier_initialized) {
+                pthread_barrier_destroy(&sort_barrier);
+            }
+            free(thread_args);
+            return;
+        }
+        threads_created++;
+        current_pos += chunk_size;
+    }
+
+    // Main thread performs merging after threads complete
+    for (unsigned int i = 0; i < num_threads; i++) {
+        ret = pthread_join(thread_args[i].tid, NULL);
+        if (ret != 0) {
+            fprintf(stderr, "Failed to join thread %d: %s\n", i, strerror(ret));
+        }
+    }
+    
+    // All threads have completed their individual sorts at this point
+    // Main thread performs merging with mutex protection
+    pthread_mutex_lock(&merge_mutex);
+
+        // Merge sorted chunks
+    for (size_t size = chunk_size; size < n; size = size * 2) {
+        for (size_t i = 0; i < n - size; i += size * 2) {
+            int mid = (int)(i + size - 1);
+            int right_end = (int)((i + size * 2 - 1) < (n - 1) ? (i + size * 2 - 1) : (n - 1));
+            merge_s(A, (int)i, mid, right_end);
+        }
+    }
+    pthread_mutex_unlock(&merge_mutex);
+
+    // Clean up
+    if (barrier_initialized) {
+        ret = pthread_barrier_destroy(&sort_barrier);
+        if (ret != 0) {
+            fprintf(stderr, "Failed to destroy barrier: %s\n", strerror(ret));
+        }
+    }
+    free(thread_args);
+}
+
+double getMilliSeconds() {
+    struct timeval now;
+    gettimeofday(&now, (struct timezone *)0);
+    return (double)now.tv_sec * 1000.0 + (double)now.tv_usec / 1000.0;
 }

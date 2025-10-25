@@ -1,11 +1,17 @@
 #ifndef LAB_H
 #define LAB_H
+
+// Threading support
+#ifndef _REENTRANT
+#define _REENTRANT
+#endif
 #include <pthread.h>
 
-#ifdef __cplusplus
-extern "C"
-{
+// Test mode specific configurations
+#ifdef TEST
+#define ENABLE_VERIFICATION
 #endif
+
 
   // The threshold that we will use to switch to insertion sort, make sure that
   // you use test arrays bigger than 5 so you are testing the merge sort
@@ -41,7 +47,7 @@ extern "C"
    * @param n The size of the array
    * @param num_threads The number of threads to use.
    */
-  void mergesort_mt(int *A, int n, int num_thread);
+  void mergesort_mt(int *A, size_t n, unsigned int num_threads);
 
   /**
    * @brief retuns the current time as milliseconds
@@ -56,8 +62,8 @@ extern "C"
   struct parallel_args
   {
     int *A;
-    int start;
-    int end;
+    size_t start;
+    size_t end;
     pthread_t tid;
   };
 
@@ -79,7 +85,7 @@ extern "C"
   int myMain(int argc, char **argv);
 
 #ifdef __cplusplus
-} // extern "C"
+
 #endif
 
 #endif

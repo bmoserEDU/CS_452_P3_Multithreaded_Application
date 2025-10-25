@@ -15,8 +15,9 @@ CFLAGS += -Wformat -Wformat=2 -Wconversion -Wsign-conversion -Wimplicit-fallthro
 CFLAGS += -fstack-protector-strong
 CFLAGS += -Werror=format-security -Werror=implicit -Werror=incompatible-pointer-types -Werror=int-conversion
 
-# For threading uncomment the next line
-#LDFLAGS ?= -pthread
+# Threading support
+LDFLAGS ?= -pthread
+CFLAGS += -D_REENTRANT
 
 # Build configurations
 ifeq ($(BUILD),release)

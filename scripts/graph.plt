@@ -6,6 +6,8 @@ set title "Time to sort vs number of threads"
 set ylabel "Time to sort (milliseconds)"
 set xlabel "Number of Threads"
 set style data linespoints
+set xrange [1:32]
+set grid         
 set term png
 set output filename
-plot "data.dat" t "time to sort"
+plot "data.dat" using 1:2 title "time to sort"

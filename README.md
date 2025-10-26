@@ -26,6 +26,13 @@ pthread_barrier doc: https://www.gnu.org/software/gnuastro/manual/html_node/Impl
 
 ## Analysis
 
-
+My graph doesn't match the example one as threads increase. I've tried a few different things but it sort of stagnates as threads increase, 
+rather than increase in time as the number of threads goes up. I think this might be one or more factors. The first is that I'm 
+only locking when the main thread merges all other threads together. So it's really just dependent on the main thread merging rather
+than each thread sorting and context switching between each one. I've tried to move the mutex lock around but the results have been 
+essentially the same, so I'm not sure where else to implement the lock. The other is it may have something to do with my barrier
+causing all threads to wait until each one is done? Again, I've tried a few different places to implement the barrier but I think
+it makes the most sense where it is currently used. That being said, my results are pretty consistent (running on Onyx) and
+the program is fastest between 14 and 16 threads before it begins to stagnate.
 
 ![Example Image](scripts/student_plot.png)

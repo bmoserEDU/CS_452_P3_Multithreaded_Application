@@ -35,6 +35,14 @@ static void insertion_sort(int A[], int p, int r)
     }
 }
 
+/**
+ * @brief Sorts an array of ints into ascending order using the constant
+ * INSERTION_SORT_THRESHOLD internally
+ *
+ * @param A A pointer to the start of the array
+ * @param p The starting index
+ * @param r The ending index
+ */
 void mergesort_s(int A[], int p, int r)
 {
   if (r - p + 1 <=  INSERTION_SORT_THRESHOLD)
@@ -51,6 +59,16 @@ void mergesort_s(int A[], int p, int r)
 
 }
 
+/**
+ * @brief Merge two sorted sequences A[p..q] and A[q+1..r] and place merged
+ *              output back in array A. Uses extra space proportional to
+ *              A[p..r].
+ *
+ * @param A The array to merge into
+ * @param p The starting index of the first half
+ * @param q The middle
+ * @param r The ending index of the second half
+ */
 void merge_s(int A[], int p, int q, int r)
 {
   // converting to size_t to fix warnings
@@ -110,6 +128,13 @@ void merge_s(int A[], int p, int q, int r)
   free(B);
 }
 
+/**
+ * @brief The function that is called by each thread to sort their chunk
+ *
+ * @param args see struct parallel_args
+ * @return void* always NULL
+ * AI Use: Assisted by Claude
+ */
 void *parallel_mergesort(void *args)
 {
     struct parallel_args *pargs = (struct parallel_args *)args;
@@ -120,29 +145,43 @@ void *parallel_mergesort(void *args)
         mergesort_s(pargs->A, (int)start, (int)end);
     }
     
-    // Wait for all threads to complete their initial sort
+    //Using barrier to sync threads after each sort, threads wait here until all have sorted their array portion before proceeding
     pthread_barrier_wait(&sort_barrier);
     
     return NULL;
 }
 
+/**
+ * @brief Sorts an array of ints into ascending order using multiple
+ * threads
+ *
+ * @param A A pointer to the start of the array
+ * @param n The size of the array
+ * @param num_threads The number of threads to use.
+ * AI Use: Assisted by Claude
+ */
 void mergesort_mt(int *A, size_t n, unsigned int num_threads)
 {
     int barrier_initialized = 0;
     int ret = 0;
 
+    // Handling egde case where array size < num threads
+    if (n < num_threads) {
+        // If array is smaller than thread count, use only as many threads as elements
+        num_threads = (unsigned int)n;
+    }
+    
     if (num_threads > MAX_THREADS) {
         // forcing to max threads if necessary
         num_threads = MAX_THREADS;
     }
     
     if (num_threads <= 1 || n <= INSERTION_SORT_THRESHOLD) {
-        // Cast to int is safe here since we know n is small
         mergesort_s(A, 0, (int)(n - 1));
         return;
     }
     
-    // Initialize barrier for synchronizing threads
+    // Initializing a barrier for my threads 
     ret = pthread_barrier_init(&sort_barrier, NULL, num_threads);
     if (ret != 0) {
         fprintf(stderr, "Failed to initialize barrier: %s\n", strerror(ret));
@@ -192,7 +231,6 @@ void mergesort_mt(int *A, size_t n, unsigned int num_threads)
         current_pos += chunk_size;
     }
 
-    // Main thread performs merging after threads complete
     for (unsigned int i = 0; i < num_threads; i++) {
         ret = pthread_join(thread_args[i].tid, NULL);
         if (ret != 0) {
@@ -200,11 +238,11 @@ void mergesort_mt(int *A, size_t n, unsigned int num_threads)
         }
     }
     
-    // All threads have completed their individual sorts at this point
-    // Main thread performs merging with mutex protection
+    // locking for main thread safety
     pthread_mutex_lock(&merge_mutex);
 
         // Merge sorted chunks
+        // This is a very critical section!
     for (size_t size = chunk_size; size < n; size = size * 2) {
         for (size_t i = 0; i < n - size; i += size * 2) {
             int mid = (int)(i + size - 1);
@@ -214,7 +252,7 @@ void mergesort_mt(int *A, size_t n, unsigned int num_threads)
     }
     pthread_mutex_unlock(&merge_mutex);
 
-    // Clean up
+    // Check for barrier
     if (barrier_initialized) {
         ret = pthread_barrier_destroy(&sort_barrier);
         if (ret != 0) {
@@ -224,6 +262,10 @@ void mergesort_mt(int *A, size_t n, unsigned int num_threads)
     free(thread_args);
 }
 
+/**
+ * @brief retuns the current time as milliseconds
+ * @return the number of milliseconds
+ */
 double getMilliSeconds() {
     struct timeval now;
     gettimeofday(&now, (struct timezone *)0);

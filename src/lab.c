@@ -56,7 +56,6 @@ void mergesort_s(int A[], int p, int r)
       mergesort_s(A, q + 1, r);
       merge_s(A, p, q, r);
     }
-
 }
 
 /**
@@ -124,7 +123,6 @@ void merge_s(int A[], int p, int q, int r)
       A[l] = B[k];
       k++;
     }
-
   free(B);
 }
 
